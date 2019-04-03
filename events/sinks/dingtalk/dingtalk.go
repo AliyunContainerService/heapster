@@ -23,6 +23,7 @@ import (
 	"k8s.io/heapster/events/core"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 const (
@@ -55,10 +56,11 @@ level: Normal or Warning. The event level greater than global level will emit.
 label: some thing unique when you want to distinguish different k8s clusters.
 */
 type DingTalkSink struct {
-	Endpoint string
-	Token    string
-	Level    int
-	Labels   []string
+	Endpoint   string
+	Namespaces []string
+	Token      string
+	Level      int
+	Labels     []string
 }
 
 func (d *DingTalkSink) Name() string {
@@ -86,6 +88,18 @@ func (d *DingTalkSink) isEventLevelDangerous(level string) bool {
 }
 
 func (d *DingTalkSink) Ding(event *v1.Event) {
+	if len(d.Namespaces) != 0 {
+		found := false
+		for _, namespace := range d.Namespaces {
+			if namespace == event.Namespace {
+				found = true
+			}
+		}
+		if !found {
+			return
+		}
+	}
+
 	msg := createMsgFromEvent(d.Labels, event)
 	if msg == nil {
 		glog.Warningf("failed to create msg from event,because of %v", event)
@@ -157,6 +171,10 @@ func NewDingTalkSink(uri *url.URL) (*DingTalkSink, error) {
 	//add extra labels
 	if len(opts["label"]) >= 1 {
 		d.Labels = opts["label"]
+	}
+
+	if len(opts["namespaces"]) >= 1 {
+		d.Namespaces = strings.Split(opts["namespaces"][0], ",")
 	}
 
 	return d, nil
